@@ -1,0 +1,22 @@
+/target
+Cargo.lock
+
+# Environment files with secrets
+examples/.env
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output
+audio_output/
+audio_storage/
+*.mp4
+*.mp3

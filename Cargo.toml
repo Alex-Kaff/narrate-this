@@ -1,0 +1,32 @@
+[package]
+name = "narrate-this"
+version = "0.1.0"
+edition = "2024"
+description = "SDK for converting text and articles into narrated audio-visual content"
+license = "MIT"
+repository = "https://github.com/Alex-Kaff/narrate-this"
+keywords = ["tts", "narration", "video", "audio", "pipeline"]
+categories = ["multimedia", "multimedia::audio", "multimedia::video"]
+
+[features]
+default = []
+pg-cache = ["dep:sqlx", "dep:chrono"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["fs", "time", "sync", "process", "macros", "rt-multi-thread"] }
+thiserror = "2"
+tracing = "0.1"
+futures = "0.3"
+async-trait = "0.1"
+sha2 = "0.10"
+base64 = "0.22"
+
+# Feature-gated
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono"], optional = true }
+chrono = { version = "0.4", features = ["serde"], optional = true }
+
+[dev-dependencies]
+dotenvy = "0.15"

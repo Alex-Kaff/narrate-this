@@ -1,0 +1,155 @@
+use std::marker::PhantomData;
+
+use crate::error::{Result, SdkError};
+use crate::pipeline::ContentPipeline;
+use crate::traits::{
+    AudioStorage, CacheProvider, ContentProvider, KeywordExtractor, MediaSearchProvider,
+    RenderConfig, TextTransformer, TtsProvider, VideoRenderer,
+};
+
+// ── Typestate markers ──
+
+pub struct Init;
+pub struct HasContent;
+pub struct HasTts;
+
+// ── Builder ──
+
+pub struct PipelineBuilder<State = Init> {
+    inner: PipelineBuilderInner,
+    _state: PhantomData<State>,
+}
+
+struct PipelineBuilderInner {
+    tts: Option<Box<dyn TtsProvider>>,
+    content: Option<Box<dyn ContentProvider>>,
+    text_transforms: Vec<Box<dyn TextTransformer>>,
+    keyword_extractor: Option<Box<dyn KeywordExtractor>>,
+    media_search: Option<Box<dyn MediaSearchProvider>>,
+    audio_storage: Option<Box<dyn AudioStorage>>,
+    cache: Option<Box<dyn CacheProvider>>,
+    video_renderer: Option<Box<dyn VideoRenderer>>,
+    render_config: Option<RenderConfig>,
+}
+
+impl PipelineBuilderInner {
+    fn new() -> Self {
+        Self {
+            tts: None,
+            content: None,
+            text_transforms: Vec::new(),
+            keyword_extractor: None,
+            media_search: None,
+            audio_storage: None,
+            cache: None,
+            video_renderer: None,
+            render_config: None,
+        }
+    }
+}
+
+fn transition<From, To>(builder: PipelineBuilder<From>) -> PipelineBuilder<To> {
+    PipelineBuilder {
+        inner: builder.inner,
+        _state: PhantomData,
+    }
+}
+
+// ── Init state ──
+
+impl PipelineBuilder<Init> {
+    pub fn new() -> Self {
+        Self {
+            inner: PipelineBuilderInner::new(),
+            _state: PhantomData,
+        }
+    }
+
+    /// Set the content provider (web scraper). Transitions to HasContent.
+    pub fn content(mut self, provider: impl ContentProvider + 'static) -> PipelineBuilder<HasContent> {
+        self.inner.content = Some(Box::new(provider));
+        transition(self)
+    }
+
+    /// Set the TTS provider directly (skip content for text-only pipelines). Transitions to HasTts.
+    pub fn tts(mut self, provider: impl TtsProvider + 'static) -> PipelineBuilder<HasTts> {
+        self.inner.tts = Some(Box::new(provider));
+        transition(self)
+    }
+}
+
+impl Default for PipelineBuilder<Init> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── HasContent state ──
+
+impl PipelineBuilder<HasContent> {
+    /// Add a text transformation step. Can be chained multiple times. Stays in HasContent.
+    pub fn text_transform(mut self, t: impl TextTransformer + 'static) -> PipelineBuilder<HasContent> {
+        self.inner.text_transforms.push(Box::new(t));
+        self
+    }
+
+    /// Set the TTS provider. Transitions to HasTts.
+    pub fn tts(mut self, provider: impl TtsProvider + 'static) -> PipelineBuilder<HasTts> {
+        self.inner.tts = Some(Box::new(provider));
+        transition(self)
+    }
+}
+
+// ── HasTts state ──
+
+impl PipelineBuilder<HasTts> {
+    /// Set keyword extractor and media search provider for visual media.
+    pub fn media(
+        mut self,
+        keywords: impl KeywordExtractor + 'static,
+        search: impl MediaSearchProvider + 'static,
+    ) -> Self {
+        self.inner.keyword_extractor = Some(Box::new(keywords));
+        self.inner.media_search = Some(Box::new(search));
+        self
+    }
+
+    /// Set the video renderer and its configuration.
+    pub fn renderer(mut self, renderer: impl VideoRenderer + 'static, config: RenderConfig) -> Self {
+        self.inner.video_renderer = Some(Box::new(renderer));
+        self.inner.render_config = Some(config);
+        self
+    }
+
+    /// Set a cache provider.
+    pub fn cache(mut self, provider: impl CacheProvider + 'static) -> Self {
+        self.inner.cache = Some(Box::new(provider));
+        self
+    }
+
+    /// Set the audio storage provider.
+    pub fn audio_storage(mut self, provider: impl AudioStorage + 'static) -> Self {
+        self.inner.audio_storage = Some(Box::new(provider));
+        self
+    }
+
+    /// Build the pipeline. TTS is always set at this point (enforced by typestate).
+    pub fn build(self) -> Result<ContentPipeline> {
+        let tts = self
+            .inner
+            .tts
+            .ok_or_else(|| SdkError::Config("TTS provider is required".into()))?;
+
+        Ok(ContentPipeline {
+            tts,
+            content: self.inner.content,
+            text_transforms: self.inner.text_transforms,
+            keyword_extractor: self.inner.keyword_extractor,
+            media_search: self.inner.media_search,
+            audio_storage: self.inner.audio_storage,
+            cache: self.inner.cache,
+            video_renderer: self.inner.video_renderer,
+            render_config: self.inner.render_config,
+        })
+    }
+}
