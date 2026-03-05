@@ -9,6 +9,10 @@ A Rust SDK that turns text, URLs, or search queries into narrated videos — com
 - **Build pipeline** from text content to rendered video in a single calL
 - **Pluggable providers** — swap any stage by implementing a trait
 
+Here's a cringe demo made using this:
+
+https://github.com/user-attachments/assets/a164e9d6-2fcf-4fd6-905f-0f0d001474d2
+
 I watch random videos when I code, like the news, or random stuff in the background. I made this to be used in an automated pipeline for another personal app, which, in realtime reads from RSS feeds I m interested in and generates this content to satisfy my ADHD brain
 
 ## Quick start
