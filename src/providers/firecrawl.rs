@@ -14,6 +14,7 @@ or is otherwise inaccessible (e.g. \"subscribe to read\", \"create an account\",
 \"this content is for members only\"), respond with EXACTLY the text: PAYWALL_DETECTED \
 — nothing else.";
 
+/// Configuration for the Firecrawl content scraper.
 pub struct FirecrawlConfig {
     pub base_url: String,
     /// Full override for the article narration prompt. When `None`, a prompt is
@@ -39,6 +40,10 @@ impl Default for FirecrawlConfig {
     }
 }
 
+/// Content provider backed by a [Firecrawl](https://firecrawl.dev) instance.
+///
+/// Scrapes article URLs and searches the web, using Firecrawl's LLM extraction
+/// to produce narration-ready text. Handles paywalls by falling back to search.
 pub struct FirecrawlScraper {
     config: FirecrawlConfig,
     client: reqwest::Client,

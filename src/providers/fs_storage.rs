@@ -6,6 +6,10 @@ use crate::error::{Result, SdkError};
 use crate::traits::AudioStorage;
 use crate::util;
 
+/// Local filesystem audio storage with content-addressed deduplication.
+///
+/// Files are stored as `<base_dir>/<hash[..2]>/<hash>.mp3`. Identical audio
+/// bytes produce the same path, so duplicate writes are skipped.
 pub struct FsAudioStorage {
     base_dir: PathBuf,
 }

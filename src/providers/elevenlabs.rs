@@ -8,11 +8,17 @@ use crate::types::{CaptionSegment, TtsResult};
 const ELEVENLABS_TTS_URL: &str =
     "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream/with-timestamps";
 
+/// Configuration for the ElevenLabs TTS provider.
 pub struct ElevenLabsConfig {
+    /// Your ElevenLabs API key.
     pub api_key: String,
+    /// Voice ID. Default: `"Gr7mLjPA3HhuWxZidxPW"`.
     pub voice_id: String,
+    /// Model ID. Default: `"eleven_flash_v2_5"`.
     pub model_id: String,
+    /// Playback speed multiplier. Default: 1.0.
     pub speed: f64,
+    /// HTTP request timeout in seconds. Default: 90.
     pub timeout_secs: u64,
 }
 
@@ -28,6 +34,10 @@ impl Default for ElevenLabsConfig {
     }
 }
 
+/// ElevenLabs TTS provider with word-level alignment.
+///
+/// Uses the streaming-with-timestamps endpoint to produce both audio and
+/// word-level [`CaptionSegment`]s.
 pub struct ElevenLabsTts {
     config: ElevenLabsConfig,
     client: reqwest::Client,

@@ -1,3 +1,61 @@
+//! # narrate-this
+//!
+//! A Rust SDK that turns text, URLs, or search queries into narrated videos —
+//! complete with TTS, captions, and stock visuals.
+//!
+//! ## Quick start
+//!
+//! ```rust,no_run
+//! use narrate_this::{
+//!     ContentPipeline, ContentSource, ElevenLabsConfig, ElevenLabsTts,
+//!     FfmpegRenderer, FirecrawlScraper, FsAudioStorage, OpenAiConfig,
+//!     OpenAiKeywords, PexelsSearch, RenderConfig,
+//! };
+//!
+//! # async fn example() -> narrate_this::Result<()> {
+//! let pipeline = ContentPipeline::builder()
+//!     .content(FirecrawlScraper::new("http://localhost:3002"))
+//!     .tts(ElevenLabsTts::new(ElevenLabsConfig {
+//!         api_key: "your-key".into(),
+//!         ..Default::default()
+//!     }))
+//!     .media(
+//!         OpenAiKeywords::new(OpenAiConfig {
+//!             api_key: "your-key".into(),
+//!             ..Default::default()
+//!         }),
+//!         PexelsSearch::new("your-key"),
+//!     )
+//!     .renderer(FfmpegRenderer::new(), RenderConfig::default())
+//!     .audio_storage(FsAudioStorage::new("./output"))
+//!     .build()?;
+//!
+//! let output = pipeline
+//!     .process(ContentSource::ArticleUrl {
+//!         url: "https://example.com/article".into(),
+//!         title: Some("My Article".into()),
+//!     })
+//!     .await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Pipeline stages
+//!
+//! ```text
+//! Content Source → Narration → Text Transforms → TTS → Media Search → Audio Storage → Video Render
+//! ```
+//!
+//! Only TTS is required. Everything else is optional — skip content sourcing if
+//! you pass raw text, skip media search if you just want audio, skip rendering
+//! if you don't need video.
+//!
+//! ## Custom providers
+//!
+//! Swap any stage by implementing the matching trait: [`TtsProvider`],
+//! [`ContentProvider`], [`KeywordExtractor`], [`MediaSearchProvider`],
+//! [`TextTransformer`], [`AudioStorage`], [`CacheProvider`], or [`VideoRenderer`].
+
 mod error;
 mod types;
 pub(crate) mod util;

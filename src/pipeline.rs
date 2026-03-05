@@ -16,6 +16,28 @@ struct CachedTts {
     caption_segments: Vec<CaptionSegment>,
 }
 
+/// The main pipeline that orchestrates narration, TTS, media search, and video rendering.
+///
+/// Built via [`ContentPipeline::builder()`] which uses a type-state pattern
+/// to enforce valid configuration at compile time.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use narrate_this::{ContentPipeline, ContentSource, ElevenLabsConfig, ElevenLabsTts};
+///
+/// # async fn example() -> narrate_this::Result<()> {
+/// let pipeline = ContentPipeline::builder()
+///     .tts(ElevenLabsTts::new(ElevenLabsConfig {
+///         api_key: "your-key".into(),
+///         ..Default::default()
+///     }))
+///     .build()?;
+///
+/// let output = pipeline.process(ContentSource::Text("Hello world".into())).await?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct ContentPipeline {
     pub(crate) tts: Box<dyn TtsProvider>,
     pub(crate) content: Option<Box<dyn ContentProvider>>,

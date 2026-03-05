@@ -15,6 +15,17 @@ pub struct HasTts;
 
 // ── Builder ──
 
+/// Builder for [`ContentPipeline`](crate::ContentPipeline).
+///
+/// Uses a type-state pattern to enforce that a TTS provider is set before
+/// building. Start with [`ContentPipeline::builder()`](crate::ContentPipeline::builder).
+///
+/// # States
+///
+/// - **Init** — starting state. Call `.content()` or `.tts()`.
+/// - **HasContent** — content provider set. Call `.text_transform()` (chainable) then `.tts()`.
+/// - **HasTts** — TTS set. Optionally configure `.media()`, `.renderer()`,
+///   `.cache()`, `.audio_storage()`, then `.build()`.
 pub struct PipelineBuilder<State = Init> {
     inner: PipelineBuilderInner,
     _state: PhantomData<State>,

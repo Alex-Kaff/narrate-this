@@ -5,6 +5,9 @@ use crate::error::{Result, SdkError};
 use crate::traits::{MediaSearchProvider, MediaSearchResult};
 use crate::types::MediaKind;
 
+/// Media search provider using the [Pexels](https://pexels.com) API.
+///
+/// Searches for stock videos first, falling back to images if no videos match.
 pub struct PexelsSearch {
     api_key: String,
     client: reqwest::Client,

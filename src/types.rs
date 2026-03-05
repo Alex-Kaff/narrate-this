@@ -58,13 +58,21 @@ impl NarrationStyle {
     }
 }
 
+/// A single word-level caption with timing information.
+///
+/// Produced by TTS providers that support alignment data (e.g. ElevenLabs).
+/// Used for subtitle rendering and media segment timing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaptionSegment {
+    /// The word or token text.
     pub text: String,
+    /// Start time in milliseconds from the beginning of the audio.
     pub start_ms: u64,
+    /// Duration in milliseconds.
     pub duration_ms: u64,
 }
 
+/// The type of media asset (image or video).
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -74,44 +82,81 @@ pub enum MediaKind {
     Video,
 }
 
+/// A media segment tied to a time range in the narration audio.
+///
+/// Each segment maps a stock image or video URL to a portion of the timeline.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaSegment {
+    /// URL of the media asset (image or video).
     pub url: String,
+    /// Start time in milliseconds.
     pub start_ms: f64,
+    /// End time in milliseconds.
     pub end_ms: f64,
+    /// Whether this is an image or video.
     #[serde(default)]
     pub kind: MediaKind,
 }
 
+/// Output from a TTS synthesis call.
 #[derive(Debug, Clone)]
 pub struct TtsResult {
+    /// Raw audio bytes (typically MP3).
     pub audio: Vec<u8>,
+    /// Word-level caption segments with timing.
     pub captions: Vec<CaptionSegment>,
 }
 
+/// Output from keyword extraction.
 #[derive(Debug, Clone)]
 pub struct KeywordResult {
+    /// Extracted search keywords for media lookup.
     pub keywords: Vec<String>,
 }
 
-/// Complete pipeline output.
+/// Complete pipeline output returned by [`ContentPipeline::process`](crate::ContentPipeline::process).
 #[derive(Debug, Clone)]
 pub struct ContentOutput {
+    /// The narration text (after any text transforms).
     pub narration: String,
+    /// Raw audio bytes (MP3).
     pub audio: Vec<u8>,
+    /// Word-level captions with timing data.
     pub captions: Vec<CaptionSegment>,
+    /// Visual media segments matched to the narration timeline.
     pub media_segments: Vec<MediaSegment>,
+    /// Path where audio was stored, if an [`AudioStorage`](crate::AudioStorage) was configured.
     pub audio_path: Option<String>,
+    /// Path to the rendered video, if a [`VideoRenderer`](crate::VideoRenderer) was configured.
     pub video_path: Option<String>,
 }
 
-/// A background audio track to mix with narration.
+/// A background audio track to mix with the narration audio.
+///
+/// Tracks loop by default and play at 30% volume. Use the builder methods
+/// to customize.
+///
+/// # Example
+///
+/// ```
+/// use narrate_this::AudioTrack;
+///
+/// let track = AudioTrack::new("./music.mp3")
+///     .volume(0.15)
+///     .start_at(2000) // delay by 2 seconds
+///     .no_loop();
+/// ```
 #[derive(Debug, Clone)]
 pub struct AudioTrack {
+    /// File path to the audio file.
     pub path: String,
+    /// Volume level from 0.0 (silent) to 1.0 (full). Default: 0.3.
     pub volume: f32,
+    /// Optional delay before the track starts (milliseconds).
     pub start_ms: Option<u64>,
+    /// Optional end time — the track is trimmed at this point (milliseconds).
     pub end_ms: Option<u64>,
+    /// Whether to loop the track for the duration of the narration. Default: `true`.
     pub loop_track: bool,
 }
 

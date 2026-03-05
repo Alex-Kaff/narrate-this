@@ -1,5 +1,9 @@
 # narrate-this
 
+[![Crates.io](https://img.shields.io/crates/v/narrate-this)](https://crates.io/crates/narrate-this)
+[![docs.rs](https://img.shields.io/docsrs/narrate-this)](https://docs.rs/narrate-this)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A Rust SDK that turns text, URLs, or search queries into narrated videos — complete with TTS, captions, and stock visuals.
 
 - **Build pipeline** from text content to rendered video in a single calL

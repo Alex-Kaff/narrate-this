@@ -12,6 +12,7 @@ scenes, or actions (e.g. \"stock market trading floor\", \"solar panels field\",
 \"doctor examining patient\"). Return ONLY a comma-separated list of keywords, \
 nothing else.";
 
+/// Configuration for OpenAI-backed providers.
 pub struct OpenAiConfig {
     pub api_key: String,
     pub model: String,
@@ -28,6 +29,10 @@ impl Default for OpenAiConfig {
     }
 }
 
+/// Keyword extractor using OpenAI's chat completions API.
+///
+/// Extracts 2–3 concrete, visual search keywords from narration text chunks
+/// for stock media lookup.
 pub struct OpenAiKeywords {
     config: OpenAiConfig,
     client: reqwest::Client,
@@ -116,6 +121,10 @@ Do NOT modify anything else than what's requested. \
 The requested modification may be to change the style, tone, or to even rewrite it to focus on a different subject, or to extract only some information from it. \
 Reply ONLY with the new formatted text exactly as asked.";
 
+/// Text transformer using OpenAI's chat completions API.
+///
+/// Rewrites narration text according to custom style instructions (e.g.
+/// "casual podcast tone", "formal news broadcast").
 pub struct OpenAiTransform {
     client: reqwest::Client,
     api_key: String,

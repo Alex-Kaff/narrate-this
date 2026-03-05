@@ -1,5 +1,10 @@
 use thiserror::Error;
 
+/// Errors returned by the SDK.
+///
+/// Each variant corresponds to a pipeline stage or infrastructure concern.
+/// Non-fatal errors (e.g. a media search miss) are logged as warnings via
+/// `tracing` and won't stop the pipeline — only fatal errors surface here.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum SdkError {
@@ -37,4 +42,5 @@ pub enum SdkError {
     Json(#[from] serde_json::Error),
 }
 
+/// Convenience alias for `std::result::Result<T, SdkError>`.
 pub type Result<T> = std::result::Result<T, SdkError>;

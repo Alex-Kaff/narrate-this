@@ -2,6 +2,22 @@ use async_trait::async_trait;
 
 use crate::traits::{CacheCategory, CacheProvider};
 
+/// PostgreSQL-backed cache provider.
+///
+/// Stores pipeline results (narration, TTS, media) in a `cache` table with
+/// optional TTL expiration. Requires the `pg-cache` feature.
+///
+/// # Table schema
+///
+/// ```sql
+/// CREATE TABLE cache (
+///     content_hash TEXT NOT NULL,
+///     kind TEXT NOT NULL,
+///     data BYTEA NOT NULL,
+///     expires_at TIMESTAMPTZ,
+///     PRIMARY KEY (content_hash, kind)
+/// );
+/// ```
 pub struct PgCache {
     pool: sqlx::PgPool,
     ttl_days: i64,
