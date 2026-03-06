@@ -101,6 +101,10 @@ impl VideoRenderer for FfmpegRenderer {
             .replace(':', "\\:");
 
         let has_subtitles = !output.captions.is_empty();
+        let sub_style = config
+            .subtitle_style
+            .as_deref()
+            .unwrap_or("FontSize=24,PrimaryColour=&HFFFFFF&");
         let mut filter_parts = Vec::new();
         let mut inputs = Vec::new();
 
@@ -108,7 +112,7 @@ impl VideoRenderer for FfmpegRenderer {
             // No media — generate a black background for the audio duration
             let subtitle_filter = if has_subtitles {
                 format!(
-                    ",subtitles='{srt_path_escaped}':force_style='FontSize=24,PrimaryColour=&HFFFFFF&'"
+                    ",subtitles='{srt_path_escaped}':force_style='{sub_style}'"
                 )
             } else {
                 String::new()
@@ -181,7 +185,7 @@ impl VideoRenderer for FfmpegRenderer {
             // Add subtitles
             if has_subtitles {
                 filter_parts.push(format!(
-                    "[vout]subtitles='{srt_path_escaped}':force_style='FontSize=24,PrimaryColour=&HFFFFFF&'[vfinal]"
+                    "[vout]subtitles='{srt_path_escaped}':force_style='{sub_style}'[vfinal]"
                 ));
             } else {
                 filter_parts.push("[vout]copy[vfinal]".into());
@@ -246,6 +250,10 @@ impl VideoRenderer for FfmpegRenderer {
         for arg in &inputs {
             cmd.arg(arg);
         }
+        let video_codec = config.video_codec.as_deref().unwrap_or("libx264");
+        let audio_codec = config.audio_codec.as_deref().unwrap_or("aac");
+        let preset = config.preset.as_deref().unwrap_or("fast");
+
         cmd.args([
             "-filter_complex",
             &filter_complex,
@@ -254,16 +262,23 @@ impl VideoRenderer for FfmpegRenderer {
             "-map",
             &audio_map,
             "-c:v",
-            "libx264",
+            video_codec,
             "-preset",
-            "fast",
+            preset,
             "-c:a",
-            "aac",
-            "-shortest",
-            "-r",
-            &config.fps.to_string(),
-            &config.output_path,
+            audio_codec,
         ]);
+        if let Some(crf) = config.crf {
+            cmd.args(["-crf", &crf.to_string()]);
+        }
+        if let Some(ref pix_fmt) = config.pix_fmt {
+            cmd.args(["-pix_fmt", pix_fmt.as_str()]);
+        }
+        cmd.args(["-shortest", "-r", &config.fps.to_string()]);
+        for arg in &config.extra_output_args {
+            cmd.arg(arg);
+        }
+        cmd.arg(&config.output_path);
 
         tracing::debug!(cmd = ?cmd, "running ffmpeg");
 

@@ -19,7 +19,7 @@ I watch random videos when I code, like the news, or random stuff in the backgro
 
 ```toml
 [dependencies]
-narrate-this = "0.1"
+narrate-this = "0.2"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -114,14 +114,12 @@ ContentPipeline::builder()
     .media(StockMediaPlanner::new(keywords_provider, search_provider))
 
     .renderer(FfmpegRenderer::new(), RenderConfig {
-        width: 1920,
-        height: 1080,
-        fps: 30,
         output_path: "./output.mp4".into(),
         audio_tracks: vec![
             AudioTrack::new("./background.mp3").volume(0.15),
         ],
-    })
+        ..Default::default()
+    }.pix_fmt("yuv420p"))
     .audio_storage(FsAudioStorage::new("./audio_cache"))
     .cache(my_cache_provider)
     .build()?;
@@ -247,6 +245,36 @@ let config = RenderConfig {
     ..Default::default()
 };
 ```
+
+## FFmpeg configuration
+
+Customize encoding settings via `RenderConfig`. All fields are optional and fall back to sensible defaults:
+
+```rust
+let config = RenderConfig {
+    output_path: "./output.mp4".into(),
+    ..Default::default()
+}
+.video_codec("libx265")           // default: "libx264"
+.audio_codec("libopus")           // default: "aac"
+.preset("slow")                   // default: "fast"
+.crf(18)                          // default: ffmpeg default (23 for x264)
+.pix_fmt("yuv420p")               // broad player compatibility
+.subtitle_style("FontSize=32,PrimaryColour=&H00FFFF&,Bold=1")
+.extra_output_args(["-movflags", "+faststart"]);
+```
+
+| Field | Default | FFmpeg flag |
+|-------|---------|-------------|
+| `video_codec` | `"libx264"` | `-c:v` |
+| `audio_codec` | `"aac"` | `-c:a` |
+| `preset` | `"fast"` | `-preset` |
+| `crf` | none | `-crf` |
+| `pix_fmt` | none | `-pix_fmt` |
+| `subtitle_style` | `"FontSize=24,PrimaryColour=&HFFFFFF&"` | subtitles force_style |
+| `extra_output_args` | `[]` | any flags before output path |
+
+`extra_output_args` is a catch-all for anything not covered above (e.g. `-tune`, `-b:v`, `-movflags`).
 
 ## Providers
 
