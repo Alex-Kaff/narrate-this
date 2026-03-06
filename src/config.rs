@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use crate::error::{Result, SdkError};
 use crate::pipeline::ContentPipeline;
 use crate::traits::{
-    AudioStorage, CacheProvider, ContentProvider, KeywordExtractor, MediaSearchProvider,
-    RenderConfig, TextTransformer, TtsProvider, VideoRenderer,
+    AudioStorage, CacheProvider, ContentProvider, MediaPlanner, RenderConfig, TextTransformer,
+    TtsProvider, VideoRenderer,
 };
 
 // ── Typestate markers ──
@@ -35,8 +35,7 @@ struct PipelineBuilderInner {
     tts: Option<Box<dyn TtsProvider>>,
     content: Option<Box<dyn ContentProvider>>,
     text_transforms: Vec<Box<dyn TextTransformer>>,
-    keyword_extractor: Option<Box<dyn KeywordExtractor>>,
-    media_search: Option<Box<dyn MediaSearchProvider>>,
+    media_planner: Option<Box<dyn MediaPlanner>>,
     audio_storage: Option<Box<dyn AudioStorage>>,
     cache: Option<Box<dyn CacheProvider>>,
     video_renderer: Option<Box<dyn VideoRenderer>>,
@@ -49,8 +48,7 @@ impl PipelineBuilderInner {
             tts: None,
             content: None,
             text_transforms: Vec::new(),
-            keyword_extractor: None,
-            media_search: None,
+            media_planner: None,
             audio_storage: None,
             cache: None,
             video_renderer: None,
@@ -114,14 +112,13 @@ impl PipelineBuilder<HasContent> {
 // ── HasTts state ──
 
 impl PipelineBuilder<HasTts> {
-    /// Set keyword extractor and media search provider for visual media.
-    pub fn media(
-        mut self,
-        keywords: impl KeywordExtractor + 'static,
-        search: impl MediaSearchProvider + 'static,
-    ) -> Self {
-        self.inner.keyword_extractor = Some(Box::new(keywords));
-        self.inner.media_search = Some(Box::new(search));
+    /// Set the media planner that provides visuals for narration chunks.
+    ///
+    /// Use [`StockMediaPlanner`](crate::StockMediaPlanner) for stock search only,
+    /// or [`LlmMediaPlanner`](crate::LlmMediaPlanner) for AI-based asset matching
+    /// with optional stock fallback.
+    pub fn media(mut self, planner: impl MediaPlanner + 'static) -> Self {
+        self.inner.media_planner = Some(Box::new(planner));
         self
     }
 
@@ -155,8 +152,7 @@ impl PipelineBuilder<HasTts> {
             tts,
             content: self.inner.content,
             text_transforms: self.inner.text_transforms,
-            keyword_extractor: self.inner.keyword_extractor,
-            media_search: self.inner.media_search,
+            media_planner: self.inner.media_planner,
             audio_storage: self.inner.audio_storage,
             cache: self.inner.cache,
             video_renderer: self.inner.video_renderer,

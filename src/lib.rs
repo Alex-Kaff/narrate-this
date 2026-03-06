@@ -9,7 +9,7 @@
 //! use narrate_this::{
 //!     ContentPipeline, ContentSource, ElevenLabsConfig, ElevenLabsTts,
 //!     FfmpegRenderer, FirecrawlScraper, FsAudioStorage, OpenAiConfig,
-//!     OpenAiKeywords, PexelsSearch, RenderConfig,
+//!     OpenAiKeywords, PexelsSearch, RenderConfig, StockMediaPlanner,
 //! };
 //!
 //! # async fn example() -> narrate_this::Result<()> {
@@ -19,13 +19,13 @@
 //!         api_key: "your-key".into(),
 //!         ..Default::default()
 //!     }))
-//!     .media(
+//!     .media(StockMediaPlanner::new(
 //!         OpenAiKeywords::new(OpenAiConfig {
 //!             api_key: "your-key".into(),
 //!             ..Default::default()
 //!         }),
 //!         PexelsSearch::new("your-key"),
-//!     )
+//!     ))
 //!     .renderer(FfmpegRenderer::new(), RenderConfig::default())
 //!     .audio_storage(FsAudioStorage::new("./output"))
 //!     .build()?;
@@ -43,18 +43,19 @@
 //! ## Pipeline stages
 //!
 //! ```text
-//! Content Source → Narration → Text Transforms → TTS → Media Search → Audio Storage → Video Render
+//! Content Source → Narration → Text Transforms → TTS → Media → Audio Storage → Video Render
 //! ```
 //!
 //! Only TTS is required. Everything else is optional — skip content sourcing if
-//! you pass raw text, skip media search if you just want audio, skip rendering
+//! you pass raw text, skip media if you just want audio, skip rendering
 //! if you don't need video.
 //!
 //! ## Custom providers
 //!
 //! Swap any stage by implementing the matching trait: [`TtsProvider`],
 //! [`ContentProvider`], [`KeywordExtractor`], [`MediaSearchProvider`],
-//! [`TextTransformer`], [`AudioStorage`], [`CacheProvider`], or [`VideoRenderer`].
+//! [`MediaPlanner`], [`TextTransformer`], [`AudioStorage`], [`CacheProvider`],
+//! or [`VideoRenderer`].
 
 mod error;
 mod types;
@@ -70,16 +71,17 @@ mod pipeline;
 
 pub use error::{Result, SdkError};
 pub use types::{
-    AudioTrack, CaptionSegment, ContentOutput, ContentSource, KeywordResult, MediaKind,
-    MediaSegment, NarrationStyle, PipelineProgress, TtsResult,
+    AudioTrack, CaptionSegment, ContentOutput, ContentSource, KeywordResult, MediaAsset,
+    MediaFallback, MediaKind, MediaSegment, MediaSource, NarrationStyle, PipelineProgress,
+    TimedChunk, TtsResult,
 };
 
 // ── Re-exports: traits ──
 
 pub use traits::{
-    AudioStorage, CacheCategory, CacheProvider, ContentProvider, KeywordExtractor,
-    MediaSearchProvider, MediaSearchResult, RenderConfig, TextTransformer, TtsProvider,
-    VideoRenderer,
+    AudioStorage, CacheCategory, CacheProvider, ContentProvider, KeywordExtractor, MediaPlanner,
+    MediaSearchProvider, MediaSearchResult, PlannedMedia, RenderConfig, TextTransformer,
+    TtsProvider, VideoRenderer,
 };
 
 // ── Re-exports: providers ──
@@ -88,8 +90,9 @@ pub use providers::elevenlabs::{ElevenLabsConfig, ElevenLabsTts};
 pub use providers::firecrawl::{FirecrawlConfig, FirecrawlScraper};
 pub use providers::ffmpeg_renderer::FfmpegRenderer;
 pub use providers::fs_storage::FsAudioStorage;
-pub use providers::openai::{OpenAiConfig, OpenAiKeywords, OpenAiTransform};
+pub use providers::openai::{LlmMediaPlanner, OpenAiConfig, OpenAiKeywords, OpenAiTransform};
 pub use providers::pexels::PexelsSearch;
+pub use providers::stock_planner::StockMediaPlanner;
 
 #[cfg(feature = "pg-cache")]
 pub use providers::pg_cache::PgCache;

@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::error::{Result, SdkError};
 use crate::traits::{MediaSearchProvider, MediaSearchResult};
-use crate::types::MediaKind;
+use crate::types::{MediaKind, MediaSource};
 
 /// Media search provider using the [Pexels](https://pexels.com) API.
 ///
@@ -121,7 +121,7 @@ impl PexelsSearch {
             .filter_map(|v| pick_best_video_file(v.video_files))
             .take(count)
             .map(|url| MediaSearchResult {
-                url,
+                source: MediaSource::Url(url),
                 kind: MediaKind::Video,
             })
             .collect()
@@ -157,7 +157,7 @@ impl PexelsSearch {
             .photos
             .into_iter()
             .map(|p| MediaSearchResult {
-                url: p.src.landscape,
+                source: MediaSource::Url(p.src.landscape),
                 kind: MediaKind::Image,
             })
             .collect())

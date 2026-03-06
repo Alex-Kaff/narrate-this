@@ -17,6 +17,9 @@ pub enum SdkError {
     #[error("Media search error: {0}")]
     MediaSearch(String),
 
+    #[error("Media planner error: {0}")]
+    MediaPlanner(String),
+
     #[error("Web scraper error: {0}")]
     WebScraper(String),
 

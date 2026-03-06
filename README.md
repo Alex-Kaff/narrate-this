@@ -6,7 +6,7 @@
 
 A Rust SDK that turns text, URLs, or search queries into narrated videos — complete with TTS, captions, and stock visuals.
 
-- **Build pipeline** from text content to rendered video in a single calL
+- **Build pipeline** from text content to rendered video in a single call
 - **Pluggable providers** — swap any stage by implementing a trait
 
 Here's a cringe demo made using this:
@@ -27,7 +27,7 @@ tokio = { version = "1", features = ["full"] }
 use narrate_this::{
     ContentPipeline, ContentSource, ElevenLabsConfig, ElevenLabsTts,
     FfmpegRenderer, FirecrawlScraper, FsAudioStorage, OpenAiConfig,
-    OpenAiKeywords, PexelsSearch, PipelineProgress, RenderConfig,
+    OpenAiKeywords, PexelsSearch, RenderConfig, StockMediaPlanner,
 };
 
 #[tokio::main]
@@ -38,13 +38,13 @@ async fn main() -> narrate_this::Result<()> {
             api_key: "your-elevenlabs-key".into(),
             ..Default::default()
         }))
-        .media(
+        .media(StockMediaPlanner::new(
             OpenAiKeywords::new(OpenAiConfig {
                 api_key: "your-openai-key".into(),
                 ..Default::default()
             }),
             PexelsSearch::new("your-pexels-key"),
-        )
+        ))
         .renderer(FfmpegRenderer::new(), RenderConfig::default())
         .audio_storage(FsAudioStorage::new("./output"))
         .build()?;
@@ -64,10 +64,10 @@ async fn main() -> narrate_this::Result<()> {
 ## How the pipeline works
 
 ```
-Content Source -> Narration -> Text Transforms -> TTS -> Media Search -> Audio Storage -> Video Render
+Content Source -> Narration -> Text Transforms -> TTS -> Media -> Audio Storage -> Video Render
 ```
 
-Only TTS is required. Everything else is optional — skip content sourcing if you pass raw text, skip media search if you just want audio, skip rendering if you don't need video.
+Only TTS is required. Everything else is optional — skip content sourcing if you pass raw text, skip media if you just want audio, skip rendering if you don't need video.
 
 ### Content sources
 
@@ -109,7 +109,10 @@ ContentPipeline::builder()
     }))
 
     // Everything below is optional, in any order
-    .media(keywords_provider, search_provider)
+
+    // Media planner — see "Media" section below
+    .media(StockMediaPlanner::new(keywords_provider, search_provider))
+
     .renderer(FfmpegRenderer::new(), RenderConfig {
         width: 1920,
         height: 1080,
@@ -123,6 +126,57 @@ ContentPipeline::builder()
     .cache(my_cache_provider)
     .build()?;
 ```
+
+## Media
+
+The `.media()` builder method takes a `MediaPlanner` — a single trait that owns all media selection logic.
+
+### Stock media only
+
+Use `StockMediaPlanner` for keyword extraction + stock search (e.g. Pexels):
+
+```rust
+.media(StockMediaPlanner::new(
+    OpenAiKeywords::new(OpenAiConfig {
+        api_key: "your-openai-key".into(),
+        ..Default::default()
+    }),
+    PexelsSearch::new("your-pexels-key"),
+))
+```
+
+### User-provided assets with AI matching
+
+Use `LlmMediaPlanner` to provide your own images/videos with descriptions. An LLM matches them to narration chunks based on semantic relevance:
+
+```rust
+use narrate_this::{LlmMediaPlanner, MediaAsset, MediaFallback, OpenAiConfig};
+
+.media(
+    LlmMediaPlanner::new(OpenAiConfig {
+        api_key: "your-openai-key".into(),
+        ..Default::default()
+    })
+    .assets(vec![
+        MediaAsset::image("./hero.jpg", "A rocket launching into space"),
+        MediaAsset::video("https://example.com/demo.mp4", "App demo walkthrough"),
+        MediaAsset::image_bytes(screenshot_bytes, "Dashboard screenshot"),
+    ])
+    // Optional: fall back to stock search for unmatched chunks
+    .stock_search(
+        OpenAiKeywords::new(OpenAiConfig {
+            api_key: "your-openai-key".into(),
+            ..Default::default()
+        }),
+        PexelsSearch::new("your-pexels-key"),
+    )
+    .fallback(MediaFallback::StockSearch) // default
+    .allow_reuse(true)                    // same asset can appear multiple times
+    .max_reuse(Some(2)),                  // but at most twice
+)
+```
+
+Media sources can be URLs, local file paths, or raw bytes — the renderer handles all three.
 
 ## Processing
 
@@ -156,7 +210,7 @@ pub struct ContentOutput {
     pub narration: String,
     pub audio: Vec<u8>,                    // MP3
     pub captions: Vec<CaptionSegment>,     // word-level timing
-    pub media_segments: Vec<MediaSegment>,
+    pub media_segments: Vec<MediaSegment>, // source: MediaSource (URL, file path, or bytes)
     pub audio_path: Option<String>,        // if audio storage configured
     pub video_path: Option<String>,        // if renderer configured
 }
@@ -204,6 +258,8 @@ Built-in:
 | `FirecrawlScraper` | [Firecrawl](https://firecrawl.dev) |
 | `OpenAiKeywords` / `OpenAiTransform` | OpenAI (gpt-4o-mini) |
 | `PexelsSearch` | [Pexels](https://pexels.com) |
+| `StockMediaPlanner` | Keywords + stock search |
+| `LlmMediaPlanner` | AI asset matching + stock fallback |
 | `FfmpegRenderer` | Local FFmpeg |
 | `FsAudioStorage` | Local filesystem |
 | `PgCache` | PostgreSQL (feature-gated: `pg-cache`) |
@@ -219,7 +275,7 @@ impl TtsProvider for MyTtsProvider {
 }
 ```
 
-Traits: `TtsProvider`, `ContentProvider`, `KeywordExtractor`, `MediaSearchProvider`, `TextTransformer`, `AudioStorage`, `CacheProvider`, `VideoRenderer`.
+Traits: `TtsProvider`, `ContentProvider`, `MediaPlanner`, `KeywordExtractor`, `MediaSearchProvider`, `TextTransformer`, `AudioStorage`, `CacheProvider`, `VideoRenderer`.
 
 ## PostgreSQL cache
 
@@ -245,17 +301,18 @@ let pipeline = ContentPipeline::builder()
 - A Firecrawl instance for URL/search sources
 - API keys for whichever providers you use
 
-## Running the example
+## Running the examples
 
 ```bash
 cp examples/.env.example examples/.env
 # fill in your API keys
 cargo run --example basic
+cargo run --example local_tts
 ```
 
 ## Error handling
 
-All errors come back as `narrate_this::SdkError` with variants for each stage (`Tts`, `Llm`, `MediaSearch`, `WebScraper`, etc.). Non-fatal errors (like a media search miss) are logged as warnings via `tracing` and won't stop the pipeline.
+All errors come back as `narrate_this::SdkError` with variants for each stage (`Tts`, `Llm`, `MediaSearch`, `MediaPlanner`, `WebScraper`, etc.). Non-fatal errors (like a media search miss) are logged as warnings via `tracing` and won't stop the pipeline.
 
 ## License
 

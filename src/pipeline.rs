@@ -1,8 +1,8 @@
 use crate::config::PipelineBuilder;
 use crate::error::{Result, SdkError};
 use crate::traits::{
-    AudioStorage, CacheCategory, CacheProvider, ContentProvider, KeywordExtractor,
-    MediaSearchProvider, RenderConfig, TextTransformer, TtsProvider, VideoRenderer,
+    AudioStorage, CacheCategory, CacheProvider, ContentProvider, MediaPlanner, RenderConfig,
+    TextTransformer, TtsProvider, VideoRenderer,
 };
 use crate::types::{
     CaptionSegment, ContentOutput, ContentSource, MediaSegment, PipelineProgress, TtsResult,
@@ -16,7 +16,7 @@ struct CachedTts {
     caption_segments: Vec<CaptionSegment>,
 }
 
-/// The main pipeline that orchestrates narration, TTS, media search, and video rendering.
+/// The main pipeline that orchestrates narration, TTS, media, and video rendering.
 ///
 /// Built via [`ContentPipeline::builder()`] which uses a type-state pattern
 /// to enforce valid configuration at compile time.
@@ -42,8 +42,7 @@ pub struct ContentPipeline {
     pub(crate) tts: Box<dyn TtsProvider>,
     pub(crate) content: Option<Box<dyn ContentProvider>>,
     pub(crate) text_transforms: Vec<Box<dyn TextTransformer>>,
-    pub(crate) keyword_extractor: Option<Box<dyn KeywordExtractor>>,
-    pub(crate) media_search: Option<Box<dyn MediaSearchProvider>>,
+    pub(crate) media_planner: Option<Box<dyn MediaPlanner>>,
     pub(crate) audio_storage: Option<Box<dyn AudioStorage>>,
     pub(crate) cache: Option<Box<dyn CacheProvider>>,
     pub(crate) video_renderer: Option<Box<dyn VideoRenderer>>,
@@ -58,7 +57,7 @@ impl ContentPipeline {
         PipelineBuilder::new()
     }
 
-    /// Run the full pipeline: narration → text transforms → TTS → media search → audio storage → video render.
+    /// Run the full pipeline: narration -> text transforms -> TTS -> media -> audio storage -> video render.
     pub async fn process(&self, source: ContentSource) -> Result<ContentOutput> {
         self.process_inner(source, None).await
     }
@@ -121,7 +120,7 @@ impl ContentPipeline {
             caption_count: captions.len(),
         });
 
-        // ── Media search (with cache) ──
+        // ── Media ──
         let media_segments = self
             .fetch_media_segments(&narration, &captions, cb)
             .await;
@@ -147,7 +146,7 @@ impl ContentPipeline {
             video_path: None,
         };
 
-        // ── Video render (when renderer + config are set) ──
+        // ── Video render ──
         if let Some(renderer) = &self.video_renderer {
             let config = self
                 .render_config
@@ -255,10 +254,9 @@ impl ContentPipeline {
         captions: &[CaptionSegment],
         cb: ProgressCb<'_>,
     ) -> Vec<MediaSegment> {
-        let (Some(keyword_extractor), Some(media_search)) =
-            (&self.keyword_extractor, &self.media_search)
-        else {
-            return vec![];
+        let planner = match &self.media_planner {
+            Some(p) => p,
+            None => return vec![],
         };
 
         if narration.is_empty() || captions.is_empty() {
@@ -267,13 +265,13 @@ impl ContentPipeline {
 
         // Check cache
         let media_key = util::content_hash(narration);
-        if let Some(cached) = self.cache_get(CacheCategory::Media, &media_key).await {
-            if let Ok(segments) = serde_json::from_str::<Vec<MediaSegment>>(&cached) {
-                emit(cb, PipelineProgress::MediaSearchComplete {
-                    segment_count: segments.len(),
-                });
-                return segments;
-            }
+        if let Some(cached) = self.cache_get(CacheCategory::Media, &media_key).await
+            && let Ok(segments) = serde_json::from_str::<Vec<MediaSegment>>(&cached)
+        {
+            emit(cb, PipelineProgress::MediaSearchComplete {
+                segment_count: segments.len(),
+            });
+            return segments;
         }
 
         let chunks = util::split_into_timed_chunks(narration, captions);
@@ -285,58 +283,32 @@ impl ContentPipeline {
             chunk_count: chunks.len(),
         });
 
-        // Extract keywords and search media concurrently
-        let futs: Vec<_> = chunks
-            .into_iter()
-            .enumerate()
-            .map(|(idx, chunk)| {
-                let kw = &**keyword_extractor;
-                let media_search = &**media_search;
-                async move {
-                    let keywords = match kw.extract_keywords(&chunk.text).await {
-                        Ok(kr) => kr.keywords,
-                        Err(e) => {
-                            tracing::warn!(error = %e, chunk = idx, "keyword extraction failed");
-                            return None;
-                        }
-                    };
+        let planned = match planner.plan(&chunks).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(error = %e, "media planning failed");
+                return vec![];
+            }
+        };
 
-                    let query = keywords.join(", ");
-                    let results = match media_search.search(&query, 1).await {
-                        Ok(r) => r,
-                        Err(e) => {
-                            tracing::warn!(error = %e, chunk = idx, "media search failed");
-                            return None;
-                        }
-                    };
-
-                    let result = results.into_iter().next()?;
-                    Some((
-                        idx,
-                        MediaSegment {
-                            url: result.url,
-                            start_ms: chunk.start_ms,
-                            end_ms: chunk.end_ms,
-                            kind: result.kind,
-                        },
-                    ))
-                }
-            })
-            .collect();
-
-        let results = futures::future::join_all(futs).await;
-        let segments: Vec<MediaSegment> = results
-            .into_iter()
-            .filter_map(|r| {
-                if let Some((idx, ref seg)) = r {
-                    emit(cb, PipelineProgress::MediaSegmentFound {
-                        index: idx,
-                        kind: seg.kind,
-                    });
-                }
-                r.map(|(_, seg)| seg)
-            })
-            .collect();
+        let mut segments: Vec<MediaSegment> = Vec::new();
+        for (i, media) in planned.into_iter().enumerate() {
+            if i >= chunks.len() {
+                break;
+            }
+            if let Some(m) = media {
+                emit(cb, PipelineProgress::MediaSegmentFound {
+                    index: i,
+                    kind: m.kind,
+                });
+                segments.push(MediaSegment {
+                    source: m.source,
+                    start_ms: chunks[i].start_ms,
+                    end_ms: chunks[i].end_ms,
+                    kind: m.kind,
+                });
+            }
+        }
 
         // Cache
         if let Ok(json) = serde_json::to_string(&segments) {

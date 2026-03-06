@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha256};
 
-use crate::types::CaptionSegment;
+use crate::types::{CaptionSegment, TimedChunk};
 
 /// Minimum duration (ms) for each media segment.
 const MIN_SEGMENT_MS: f64 = 5000.0;
@@ -21,12 +21,6 @@ pub fn b64_encode(data: &[u8]) -> String {
 pub fn b64_decode(s: &str) -> Option<Vec<u8>> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.decode(s).ok()
-}
-
-pub struct TimedChunk {
-    pub text: String,
-    pub start_ms: f64,
-    pub end_ms: f64,
 }
 
 /// Split narration into chunks of at least `MIN_SEGMENT_MS`, breaking only at

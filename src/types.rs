@@ -72,6 +72,62 @@ pub struct CaptionSegment {
     pub duration_ms: u64,
 }
 
+/// The source of a media asset — a URL, local file path, or raw bytes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
+pub enum MediaSource {
+    /// A remote URL (http/https).
+    Url(String),
+    /// A local file path.
+    FilePath(String),
+    /// Raw bytes (e.g. an in-memory image).
+    Bytes(Vec<u8>),
+}
+
+impl MediaSource {
+    /// Returns a short display string for logging, truncating URLs beyond 80 characters.
+    pub fn display_short(&self) -> String {
+        match self {
+            MediaSource::Url(u) => {
+                if u.len() > 80 {
+                    let truncated: String = u.chars().take(80).collect();
+                    format!("{truncated}…")
+                } else {
+                    u.clone()
+                }
+            }
+            MediaSource::FilePath(p) => p.clone(),
+            MediaSource::Bytes(b) => format!("<{} bytes>", b.len()),
+        }
+    }
+}
+
+impl From<&str> for MediaSource {
+    fn from(s: &str) -> Self {
+        if s.starts_with("http://") || s.starts_with("https://") {
+            MediaSource::Url(s.to_string())
+        } else {
+            MediaSource::FilePath(s.to_string())
+        }
+    }
+}
+
+impl From<String> for MediaSource {
+    fn from(s: String) -> Self {
+        if s.starts_with("http://") || s.starts_with("https://") {
+            MediaSource::Url(s)
+        } else {
+            MediaSource::FilePath(s)
+        }
+    }
+}
+
+impl From<Vec<u8>> for MediaSource {
+    fn from(data: Vec<u8>) -> Self {
+        MediaSource::Bytes(data)
+    }
+}
+
 /// The type of media asset (image or video).
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -84,11 +140,11 @@ pub enum MediaKind {
 
 /// A media segment tied to a time range in the narration audio.
 ///
-/// Each segment maps a stock image or video URL to a portion of the timeline.
+/// Each segment maps a media asset (image or video) to a portion of the timeline.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaSegment {
-    /// URL of the media asset (image or video).
-    pub url: String,
+    /// Source of the media asset.
+    pub source: MediaSource,
     /// Start time in milliseconds.
     pub start_ms: f64,
     /// End time in milliseconds.
@@ -202,6 +258,91 @@ pub enum ContentSource {
     ArticleUrl { url: String, title: Option<String> },
     /// Search query — scraper searches and narrates results.
     SearchQuery(String),
+}
+
+/// A user-provided media asset with a description for AI-based media planning.
+///
+/// # Example
+///
+/// ```
+/// use narrate_this::MediaAsset;
+///
+/// let assets = vec![
+///     MediaAsset::image("./hero.jpg", "A rocket launching into space"),
+///     MediaAsset::video("https://example.com/demo.mp4", "App demo walkthrough"),
+///     MediaAsset::image_bytes(vec![/* png bytes */], "Dashboard screenshot"),
+/// ];
+/// ```
+#[derive(Debug, Clone)]
+pub struct MediaAsset {
+    /// The media source (URL, file path, or bytes).
+    pub source: MediaSource,
+    /// A text description of what this asset depicts, used by the media planner
+    /// to match assets to narration chunks.
+    pub description: String,
+    /// Whether this is an image or video.
+    pub kind: MediaKind,
+}
+
+impl MediaAsset {
+    /// Create an image asset from a URL or file path.
+    pub fn image(source: impl Into<MediaSource>, description: impl Into<String>) -> Self {
+        Self {
+            source: source.into(),
+            description: description.into(),
+            kind: MediaKind::Image,
+        }
+    }
+
+    /// Create a video asset from a URL or file path.
+    pub fn video(source: impl Into<MediaSource>, description: impl Into<String>) -> Self {
+        Self {
+            source: source.into(),
+            description: description.into(),
+            kind: MediaKind::Video,
+        }
+    }
+
+    /// Create an image asset from raw bytes.
+    pub fn image_bytes(data: Vec<u8>, description: impl Into<String>) -> Self {
+        Self {
+            source: MediaSource::Bytes(data),
+            description: description.into(),
+            kind: MediaKind::Image,
+        }
+    }
+
+    /// Create a video asset from raw bytes.
+    pub fn video_bytes(data: Vec<u8>, description: impl Into<String>) -> Self {
+        Self {
+            source: MediaSource::Bytes(data),
+            description: description.into(),
+            kind: MediaKind::Video,
+        }
+    }
+}
+
+/// What to do when the media planner can't match a user asset to a narration chunk.
+#[derive(Debug, Clone, Copy, Default)]
+#[non_exhaustive]
+pub enum MediaFallback {
+    /// Fall back to keyword extraction + stock media search
+    /// (requires `.stock_search()` to be configured on the planner).
+    #[default]
+    StockSearch,
+    /// Skip the chunk — no media for that time range.
+    Skip,
+}
+
+/// A narration chunk with timing information, used by media planners.
+#[derive(Debug, Clone)]
+pub struct TimedChunk {
+    /// The text content of this chunk.
+    pub text: String,
+    /// Start time in milliseconds.
+    pub start_ms: f64,
+    /// End time in milliseconds.
+    pub end_ms: f64,
 }
 
 /// Progress events during pipeline execution.

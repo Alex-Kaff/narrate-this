@@ -3,7 +3,7 @@ use tokio::process::Command;
 
 use crate::error::{Result, SdkError};
 use crate::traits::{RenderConfig, VideoRenderer};
-use crate::types::{ContentOutput, MediaKind};
+use crate::types::{ContentOutput, MediaKind, MediaSource};
 
 /// FFmpeg-based video renderer.
 ///
@@ -61,31 +61,29 @@ impl VideoRenderer for FfmpegRenderer {
             .await
             .map_err(|e| SdkError::VideoRender(format!("write audio: {e}")))?;
 
-        // Download media segments
+        // Resolve media segments to local files
         let mut media_files: Vec<DownloadedMedia> = Vec::new();
 
         for (i, seg) in output.media_segments.iter().enumerate() {
-            let is_image = !seg.url.contains(".mp4") && seg.kind != MediaKind::Video;
+            let is_image = seg.kind != MediaKind::Video;
             let ext = if is_image { "jpg" } else { "mp4" };
             let media_path = work_dir.join(format!("media_{i}.{ext}"));
 
-            match self.client.get(&seg.url).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    let bytes = resp
-                        .bytes()
-                        .await
-                        .map_err(|e| SdkError::VideoRender(format!("download media {i}: {e}")))?;
-                    tokio::fs::write(&media_path, &bytes)
-                        .await
-                        .map_err(|e| SdkError::VideoRender(format!("write media {i}: {e}")))?;
+            match self.resolve_media_source(&seg.source, &media_path).await {
+                Ok(()) => {
                     media_files.push(DownloadedMedia {
                         path: media_path.to_string_lossy().to_string(),
                         duration_secs: (seg.end_ms - seg.start_ms) / 1000.0,
                         is_image,
                     });
                 }
-                _ => {
-                    tracing::warn!(index = i, url = %seg.url, "failed to download media segment");
+                Err(e) => {
+                    tracing::warn!(
+                        index = i,
+                        source = %seg.source.display_short(),
+                        error = %e,
+                        "failed to resolve media segment"
+                    );
                 }
             }
         }
@@ -148,7 +146,7 @@ impl VideoRenderer for FfmpegRenderer {
                     filter_parts.push(format!(
                         "[{i}:v]loop=-1:1:0,setpts=N/{fps}/TB,\
                          scale={w}:{h}:force_original_aspect_ratio=decrease,\
-                         pad={w}:{h}:(ow-iw)/2:(oh-ih)/2{trim}[v{i}]",
+                         pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1{trim}[v{i}]",
                         fps = config.fps,
                         w = config.width,
                         h = config.height,
@@ -162,7 +160,7 @@ impl VideoRenderer for FfmpegRenderer {
                     };
                     filter_parts.push(format!(
                         "[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,\
-                         pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,\
+                         pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,\
                          setpts=PTS-STARTPTS{trim}[v{i}]",
                         w = config.width,
                         h = config.height,
@@ -281,10 +279,10 @@ impl VideoRenderer for FfmpegRenderer {
             let stderr = String::from_utf8_lossy(&result.stderr);
             // Take the last 1000 chars — the actual error is at the end,
             // the beginning is just the ffmpeg banner.
-            let tail = if stderr.len() > 1000 {
-                &stderr[stderr.len() - 1000..]
+            let tail: String = if stderr.len() > 1000 {
+                stderr.chars().skip(stderr.chars().count().saturating_sub(1000)).collect()
             } else {
-                &stderr
+                stderr.to_string()
             };
             return Err(SdkError::VideoRender(format!(
                 "ffmpeg exited with {}: {}",
@@ -293,6 +291,50 @@ impl VideoRenderer for FfmpegRenderer {
         }
 
         Ok(config.output_path.clone())
+    }
+}
+
+impl FfmpegRenderer {
+    /// Resolve a `MediaSource` to a local file at `dest_path`.
+    async fn resolve_media_source(
+        &self,
+        source: &MediaSource,
+        dest_path: &std::path::Path,
+    ) -> Result<()> {
+        match source {
+            MediaSource::Url(url) => {
+                let resp = self
+                    .client
+                    .get(url)
+                    .send()
+                    .await
+                    .map_err(|e| SdkError::VideoRender(format!("download failed: {e}")))?;
+                if !resp.status().is_success() {
+                    return Err(SdkError::VideoRender(format!(
+                        "download returned {}",
+                        resp.status()
+                    )));
+                }
+                let bytes = resp
+                    .bytes()
+                    .await
+                    .map_err(|e| SdkError::VideoRender(format!("download read failed: {e}")))?;
+                tokio::fs::write(dest_path, &bytes)
+                    .await
+                    .map_err(|e| SdkError::VideoRender(format!("write media: {e}")))?;
+            }
+            MediaSource::FilePath(path) => {
+                tokio::fs::copy(path, dest_path)
+                    .await
+                    .map_err(|e| SdkError::VideoRender(format!("copy file {path}: {e}")))?;
+            }
+            MediaSource::Bytes(data) => {
+                tokio::fs::write(dest_path, data)
+                    .await
+                    .map_err(|e| SdkError::VideoRender(format!("write bytes: {e}")))?;
+            }
+        }
+        Ok(())
     }
 }
 

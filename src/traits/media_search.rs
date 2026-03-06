@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 
 use crate::error::Result;
-use crate::types::MediaKind;
+use crate::types::{MediaKind, MediaSource};
 
 /// A single result from a media search.
 pub struct MediaSearchResult {
-    /// URL of the media asset.
-    pub url: String,
+    /// Source of the media asset.
+    pub source: MediaSource,
     /// Whether this is an image or video.
     pub kind: MediaKind,
 }

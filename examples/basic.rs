@@ -17,7 +17,7 @@
 use narrate_this::{
     ContentPipeline, ContentSource, ElevenLabsConfig, ElevenLabsTts, FfmpegRenderer,
     FirecrawlScraper, FsAudioStorage, OpenAiConfig, OpenAiKeywords, PexelsSearch,
-    PipelineProgress, RenderConfig,
+    PipelineProgress, RenderConfig, StockMediaPlanner,
 };
 
 fn env(key: &str) -> String {
@@ -36,13 +36,13 @@ async fn main() -> narrate_this::Result<()> {
             api_key: env("TTS_API_KEY"),
             ..Default::default()
         }))
-        .media(
+        .media(StockMediaPlanner::new(
             OpenAiKeywords::new(OpenAiConfig {
                 api_key: env("OPENAI_API_KEY"),
                 ..Default::default()
             }),
             PexelsSearch::new(&env("PEXELS_API_KEY")),
-        )
+        ))
         .renderer(
             FfmpegRenderer::new(),
             RenderConfig {
@@ -128,7 +128,7 @@ async fn main() -> narrate_this::Result<()> {
             seg.start_ms / 1000.0,
             seg.end_ms / 1000.0,
             seg.kind,
-            &seg.url[..seg.url.len().min(80)]
+            seg.source.display_short()
         );
     }
 
