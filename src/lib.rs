@@ -50,6 +50,41 @@
 //! you pass raw text, skip media if you just want audio, skip rendering
 //! if you don't need video.
 //!
+//! ## Local / self-hosted AI
+//!
+//! All OpenAI-backed providers accept a `base_url` for any OpenAI-compatible
+//! server (Ollama, LM Studio, vLLM, LocalAI, llama.cpp, etc.):
+//!
+//! ```rust,no_run
+//! use narrate_this::{
+//!     ContentPipeline, ContentSource, OpenAiConfig, OpenAiKeywords,
+//!     OpenAiTts, OpenAiTtsConfig, PexelsSearch, StockMediaPlanner,
+//! };
+//!
+//! # async fn example() -> narrate_this::Result<()> {
+//! let pipeline = ContentPipeline::builder()
+//!     .tts(OpenAiTts::new(OpenAiTtsConfig {
+//!         base_url: "http://localhost:8880".into(), // e.g. Kokoro
+//!         caption_model: Some("whisper-1".into()),
+//!         ..Default::default()
+//!     }))
+//!     .media(StockMediaPlanner::new(
+//!         OpenAiKeywords::new(OpenAiConfig {
+//!             base_url: "http://localhost:11434".into(), // e.g. Ollama
+//!             model: "llama3".into(),
+//!             ..Default::default()
+//!         }),
+//!         PexelsSearch::new("your-key"),
+//!     ))
+//!     .build()?;
+//!
+//! let output = pipeline
+//!     .process(ContentSource::Text("Hello world".into()))
+//!     .await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! ## Custom providers
 //!
 //! Swap any stage by implementing the matching trait: [`TtsProvider`],
@@ -91,6 +126,7 @@ pub use providers::firecrawl::{FirecrawlConfig, FirecrawlScraper};
 pub use providers::ffmpeg_renderer::FfmpegRenderer;
 pub use providers::fs_storage::FsAudioStorage;
 pub use providers::openai::{LlmMediaPlanner, OpenAiConfig, OpenAiKeywords, OpenAiTransform};
+pub use providers::openai_tts::{OpenAiTts, OpenAiTtsConfig};
 pub use providers::pexels::PexelsSearch;
 pub use providers::stock_planner::StockMediaPlanner;
 

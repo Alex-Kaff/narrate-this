@@ -1,5 +1,6 @@
 pub mod elevenlabs;
 pub mod openai;
+pub mod openai_tts;
 pub mod pexels;
 pub mod stock_planner;
 pub mod firecrawl;

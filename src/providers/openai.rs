@@ -15,10 +15,18 @@ scenes, or actions (e.g. \"stock market trading floor\", \"solar panels field\",
 nothing else.";
 
 /// Configuration for OpenAI-backed providers.
+///
+/// Set `base_url` to point at any OpenAI-compatible API (Ollama, LM Studio,
+/// vLLM, LocalAI, llama.cpp, etc.).
 pub struct OpenAiConfig {
     pub api_key: String,
     pub model: String,
     pub timeout_secs: u64,
+    /// Base URL for the API. Default: `"https://api.openai.com"`.
+    ///
+    /// For local LLMs, set this to the server address, e.g.
+    /// `"http://localhost:11434/v1"` (Ollama) or `"http://localhost:1234"` (LM Studio).
+    pub base_url: String,
 }
 
 impl Default for OpenAiConfig {
@@ -27,6 +35,7 @@ impl Default for OpenAiConfig {
             api_key: String::new(),
             model: "gpt-4o-mini".into(),
             timeout_secs: 30,
+            base_url: "https://api.openai.com".into(),
         }
     }
 }
@@ -78,9 +87,11 @@ impl KeywordExtractor for OpenAiKeywords {
             "temperature": 0.3,
         });
 
+        let url = format!("{}/v1/chat/completions", self.config.base_url.trim_end_matches('/'));
+
         let resp = self
             .client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(&url)
             .bearer_auth(&self.config.api_key)
             .json(&body)
             .send()
@@ -102,7 +113,7 @@ impl KeywordExtractor for OpenAiKeywords {
             .choices
             .first()
             .and_then(|c| c.message.content.as_ref())
-            .ok_or_else(|| SdkError::Llm("empty response from OpenAI".into()))?;
+            .ok_or_else(|| SdkError::Llm("empty response".into()))?;
 
         let keywords: Vec<String> = content
             .split(',')
@@ -131,6 +142,7 @@ pub struct OpenAiTransform {
     client: reqwest::Client,
     api_key: String,
     model: String,
+    base_url: String,
     style_instructions: String,
 }
 
@@ -148,12 +160,19 @@ impl OpenAiTransform {
             client,
             api_key: api_key.to_string(),
             model: "gpt-4o-mini".into(),
+            base_url: "https://api.openai.com".into(),
             style_instructions: style_instructions.to_string(),
         }
     }
 
     pub fn with_model(mut self, model: &str) -> Self {
         self.model = model.to_string();
+        self
+    }
+
+    /// Set a custom base URL for any OpenAI-compatible API.
+    pub fn with_base_url(mut self, base_url: &str) -> Self {
+        self.base_url = base_url.trim_end_matches('/').to_string();
         self
     }
 }
@@ -290,9 +309,11 @@ impl LlmMediaPlanner {
             "temperature": 0.2,
         });
 
+        let url = format!("{}/v1/chat/completions", self.config.base_url.trim_end_matches('/'));
+
         let resp = self
             .client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(&url)
             .bearer_auth(&self.config.api_key)
             .json(&body)
             .send()
@@ -524,9 +545,11 @@ impl TextTransformer for OpenAiTransform {
             "temperature": 0.7,
         });
 
+        let url = format!("{}/v1/chat/completions", self.base_url.trim_end_matches('/'));
+
         let resp = self
             .client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(&url)
             .bearer_auth(&self.api_key)
             .json(&body)
             .send()
