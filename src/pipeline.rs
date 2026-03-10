@@ -49,7 +49,7 @@ pub struct ContentPipeline {
     pub(crate) render_config: Option<RenderConfig>,
 }
 
-type ProgressCb<'a> = Option<&'a dyn Fn(PipelineProgress)>;
+type ProgressCb<'a> = Option<&'a (dyn Fn(PipelineProgress) + Send + Sync)>;
 
 impl ContentPipeline {
     /// Create a new pipeline builder.
@@ -66,7 +66,7 @@ impl ContentPipeline {
     pub async fn process_with_progress(
         &self,
         source: ContentSource,
-        callback: impl Fn(PipelineProgress),
+        callback: impl Fn(PipelineProgress) + Send + Sync,
     ) -> Result<ContentOutput> {
         self.process_inner(source, Some(&callback)).await
     }
